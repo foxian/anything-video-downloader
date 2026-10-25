@@ -16,8 +16,8 @@ An Agent Skill with three download engines, automatic encrypted-stream handling,
 - **Learns every new site.** The first time you meet a site, the generic workflow figures out how its player delivers video and writes a reusable doc to `references/sites/<domain>.md`. The next request for that site starts from the doc instead of re-analyzing from zero.
 - **Covers the three delivery types you actually run into.** HLS/m3u8 streams, Bilibili-style DASH dual streams, and plain direct mp4 links.
 - **Handles the annoying parts.** AES-128 HLS decryption, fMP4 init segments, split audio/video, Windows-illegal filenames, expired signed URLs.
-- **Built for real downloads, not demos.** Concurrent segmented download, resume, automatic gap repair, ffprobe verification, and a per-download log.
-- **Batch-friendly.** Turn a season's worth of episodes into jobs in one command.
+- **Built for real downloads, not demos.** Concurrent segmented download, resume, automatic gap repair, final-file verification, and a per-download log.
+- **Batch-friendly.** Ask for several episodes at once.
 - **Deterministic paths.** Absolute output paths, no cwd surprises, no hardcoded machine paths.
 
 ## What it can download
@@ -54,23 +54,48 @@ Lookup order: public `references/sites/` -> local `references/sites-private/` ->
 
 ## Quick start
 
-### 0. Check dependencies
+**Give the skill a video page URL. That's it.**
+
+```text
+Download the video on this page: https://example.com/watch/123
+```
+
+Want a specific folder or quality? Just say so: "save it to D:/Downloads and use 1080p". Several episodes at once? "Download these three episodes: <URL1> <URL2> <URL3>".
+
+The skill resolves the stream URL, picks the right engine, downloads, merges, verifies the file, and returns the output path.
+
+## Before first use
+
+One-time setup, two steps.
+
+1. **Install the skill.** Copy the `anything-video-downloader/` folder into your host's skills directory, then reload the host:
+   - Claude Code: `~/.claude/skills/anything-video-downloader/`
+   - Trae: `~/.trae-cn/skills/anything-video-downloader/`
+2. **Check dependencies:**
 
 ```text
 python anything-video-downloader/scripts/check_deps.py
 ```
 
-Each item reports `[OK]` or `[missing]`, with install commands for Windows, macOS, and Linux. Continue only when the exit code is `0`.
+All items `[OK]` and exit code `0` means you are ready. Install instructions and chrome-devtools MCP setup: [references/setup.md](anything-video-downloader/references/setup.md).
 
-### 1. Extract the media URL
+<details>
+<summary><b>Dependencies</b></summary>
 
-Open the player page, let any challenge and the player finish loading, then follow the site doc:
+| Dependency | Notes |
+|------------|-------|
+| Python 3.8+ | `python` on PATH; AES-128 decryption needs `cryptography` |
+| aria2c | On PATH; concurrent segmented downloads and resume |
+| ffmpeg / ffprobe | On PATH; merging and verification (the `direct` engine needs only ffprobe) |
+| curl | Fetch playlists/keys and probe direct links; Windows 10/11 ships `curl.exe` |
+| Browser tooling | **chrome-devtools MCP** recommended: pass Cloudflare checks and read network requests for media URLs |
 
-- **HLS**: filter network requests for `.m3u8` (preferred), or read the player config variable
-- **Bilibili**: use `ep_id` / `bvid` / `aid` directly — no browser needed
-- **Direct**: read `<video>.currentSrc`
+</details>
 
-### 2. Build a job and start
+<details>
+<summary><b>Manual CLI (optional)</b></summary>
+
+If you would rather run the pieces yourself, build a job and start it:
 
 HLS:
 
@@ -90,59 +115,38 @@ Direct (Douyin and similar):
 python anything-video-downloader/scripts/make_job.py --url "<video.currentSrc>" --page "<player URL>" --root "<download-dir>"
 ```
 
-`make_job.py` prints the cleaned filename, output path, job JSON path, and an absolute-path launch command:
+Then run the printed launch command:
 
 ```text
 python "<skill-root>/scripts/start_hls_windows.py" --args-json "<download-dir>/_job.json"
 ```
 
-Run it to open the download console; the launcher dispatches to the right engine.
+Progress on demand (HLS only): `python anything-video-downloader/scripts/hls_progress.py --root "<download-dir>"`.
 
-### 3. Batch a whole season
-
-Write a JSON array (each item: `{title, m3u8|url|ep_id, page, episode?, video_id?}`), then:
-
-```text
-python anything-video-downloader/scripts/make_job.py --batch "<download-dir>/batch.json" --strip "<site suffix>" --root "<download-dir>"
-```
-
-Job files land in `<download-dir>/_jobs/`. Start them one by one; keep about three concurrent downloads for the same site.
+</details>
 
 ## Built-in safeguards
 
 | Situation | What happens |
 |-----------|--------------|
-| Download interrupted | Rerun the same command; completed segments are skipped |
+| Download interrupted | Rerun the same request; completed segments are skipped |
 | A few segments failed | Gaps <= 5% or one segment are retried automatically |
-| Most of the stream failed | Reported as expired URL; extract a fresh one instead of retrying forever |
+| Most of the stream failed | Reported as expired URL; a fresh URL is extracted instead of retrying forever |
 | Audio/video split (Bilibili) | Both streams downloaded, then merged and verified |
-| Odd title / reserved name | Illegal characters stripped, `--video-id` fallback, episode numbering added |
-| Need proof of success | `ffprobe` checks the final file; `<out>.log` ends with `[完成]` |
+| Odd title / reserved name | Illegal characters stripped, fallback name used, episode numbering added |
+| Need proof of success | The final file is checked automatically; `<out>.log` ends with `[完成]` |
 
-## Output and naming
+## File naming rules
+
+<details>
+<summary><b>Reference</b></summary>
 
 1. Take `document.title` and strip the site suffix with `--strip`
 2. Remove Windows-illegal characters and reserved names; fall back to `--video-id` when empty
 3. Single episode/movie: `<name>.mp4`; series with `--episode N`: `<name>_第<NN>集.mp4`
 4. Use `--name` to set the base name directly
 
-Progress on demand (HLS only):
-
-```text
-python anything-video-downloader/scripts/hls_progress.py --root "<download-dir>"
-```
-
-## Requirements
-
-| Dependency | Notes |
-|------------|-------|
-| Python 3.8+ | `python` on PATH; AES-128 decryption needs `cryptography` |
-| aria2c | On PATH; concurrent segmented downloads and resume |
-| ffmpeg / ffprobe | On PATH; merging and verification (the `direct` engine needs only ffprobe) |
-| curl | Fetch playlists/keys and probe direct links; Windows 10/11 ships `curl.exe` |
-| Browser tooling | **chrome-devtools MCP** recommended: pass Cloudflare checks and read network requests for media URLs |
-
-Full setup, including chrome-devtools MCP configuration: [references/setup.md](anything-video-downloader/references/setup.md).
+</details>
 
 <details>
 <summary><b>Repository layout</b></summary>
@@ -161,7 +165,7 @@ Full setup, including chrome-devtools MCP configuration: [references/setup.md](a
     ├── references/sites-private/ # Local private site docs (.gitignore, never committed)
     └── scripts/
         ├── check_deps.py         # Dependency check: aria2c / ffmpeg / ffprobe / curl / cryptography
-        ├── make_job.py           # Build job JSON and launch command (recommended entry point)
+        ├── make_job.py           # Build job JSON and launch command
         ├── start_hls_windows.py  # Opens the download console and dispatches by engine
         ├── hls_download.py       # HLS: parse -> download -> decrypt -> merge -> verify
         ├── bilibili_download.py  # DASH: resolve streams -> download both -> merge -> verify

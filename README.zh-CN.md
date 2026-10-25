@@ -16,8 +16,8 @@
 - **每个新站点都会变成经验。** 第一次遇到某站，通用流程会判断播放器如何交付视频，并把结论写成 `references/sites/<域名>.md`。下次再遇到同站点，先读文档，不再从零分析。
 - **覆盖你真正常见的三种交付方式。** HLS/m3u8 流、B站式 DASH 双流、以及直接给 mp4 的站点。
 - **把脏活都处理掉。** AES-128 解密、fMP4 初始化段、音视频分离、Windows 非法文件名、签名 URL 过期。
-- **是真能下完，不是演示。** 分片并发、断点续传、自动补小缺口、ffprobe 成品校验、每次下载独立日志。
-- **批量友好。** 一季的剧集，一条命令生成全部 job。
+- **是真能下完，不是演示。** 分片并发、断点续传、自动补小缺口、成品校验、每次下载独立日志。
+- **批量友好。** 一次把多集一起交给它。
 - **路径可预期。** 输出绝对路径，不受 cwd 影响，不含任何本机硬编码路径。
 
 ## 能下什么
@@ -54,23 +54,48 @@
 
 ## 快速开始
 
-### 0. 检查依赖
+**给技能一个视频播放页网址，剩下的它来做。**
+
+```text
+用 anything-video-downloader 下载这个视频：https://example.com/watch/123
+```
+
+想放到指定目录或指定清晰度，直接说：`存到 D:/Downloads，要 1080p`。多集也行：`把这三集都下了：<URL1> <URL2> <URL3>`。
+
+技能会解析播放地址、选择合适的引擎、下载并合并、校验成品，最后把输出路径告诉你。
+
+## 首次使用前
+
+一次性准备，两步。
+
+1. **安装技能。** 把 `anything-video-downloader/` 整个目录复制到宿主的技能目录，然后重载宿主：
+   - Claude Code：`~/.claude/skills/anything-video-downloader/`
+   - Trae：`~/.trae-cn/skills/anything-video-downloader/`
+2. **检查依赖：**
 
 ```text
 python anything-video-downloader/scripts/check_deps.py
 ```
 
-逐项输出 `[OK]` / `[缺失]`，并给出 Windows、macOS、Linux 的安装命令。退出码 `0` 再继续。
+全部 `[OK]` 且退出码为 `0` 即可开始。安装步骤与 chrome-devtools MCP 配置见 [references/setup.md](anything-video-downloader/references/setup.md)。
 
-### 1. 提取媒体地址
+<details>
+<summary><b>依赖清单</b></summary>
 
-打开播放页，等校验和播放器加载完成，然后按站点文档取地址：
+| 依赖 | 说明 |
+|------|------|
+| Python 3.8+ | `python` 在 PATH 中；AES-128 解密需要 `cryptography` |
+| aria2c | 在 PATH 中；并发分段下载与续传 |
+| ffmpeg / ffprobe | 在 PATH 中；合并与校验（`direct` 引擎只需 ffprobe） |
+| curl | 取 playlist/密钥与直链探测；Windows 10/11 自带 `curl.exe` |
+| 浏览器工具 | 推荐 **chrome-devtools MCP**：过 Cloudflare 校验并读网络请求取媒体地址 |
 
-- **HLS**：网络请求里筛 `.m3u8`（首选），或读播放器配置变量
-- **B站**：直接用 `ep_id` / `bvid` / `aid`，无需浏览器
-- **直链**：读 `<video>.currentSrc`
+</details>
 
-### 2. 生成 job 并启动
+<details>
+<summary><b>手动 CLI（可选）</b></summary>
+
+不想让 Agent 代劳时，可以自己生成 job 再启动：
 
 HLS：
 
@@ -90,59 +115,38 @@ python anything-video-downloader/scripts/make_job.py --bvid "BV1xx411c7mD" --qua
 python anything-video-downloader/scripts/make_job.py --url "<video.currentSrc>" --page "<播放页 URL>" --root "<下载目录>"
 ```
 
-`make_job.py` 会打印清洗后的文件名、输出路径、job JSON 路径和绝对路径启动命令：
+再执行打印出的启动命令：
 
 ```text
 python "<技能根目录>/scripts/start_hls_windows.py" --args-json "<下载目录>/_job.json"
 ```
 
-执行即可打开下载控制台，启动器按 job 的 `engine` 分发。
+需要看进度时（仅 HLS）：`python anything-video-downloader/scripts/hls_progress.py --root "<下载目录>"`。
 
-### 3. 批量下一整季
-
-写一个 JSON 数组（每项 `{title, m3u8|url|ep_id, page, episode?, video_id?}`），然后：
-
-```text
-python anything-video-downloader/scripts/make_job.py --batch "<下载目录>/batch.json" --strip "<站点后缀>" --root "<下载目录>"
-```
-
-job 文件写入 `<下载目录>/_jobs/`，逐个执行启动命令；同站点建议并发不超过 3 个。
+</details>
 
 ## 内置的兜底能力
 
 | 情况 | 行为 |
 |------|------|
-| 下载被打断 | 重跑同一命令，已完成分片自动跳过 |
+| 下载被打断 | 重新提出同一需求，已完成分片自动跳过 |
 | 少量分片失败 | 缺口 ≤5% 或仅一个分片时自动重试 |
-| 大面积失败 | 判为地址过期，提示重新提取，而不是无限重试 |
+| 大面积失败 | 判为地址过期，自动重新提取，而不是无限重试 |
 | B站音视频分离 | 双流分别下载，再合并并校验 |
-| 标题含非法字符 / 保留名 | 自动清洗，空名回退 `--video-id`，剧集补集号 |
-| 需要确认成功 | `ffprobe` 校验成品；`<out>.log` 以 `[完成]` 收尾 |
+| 标题含非法字符 / 保留名 | 自动清洗，空名使用回退名，剧集补集号 |
+| 需要确认成功 | 成品自动校验；`<out>.log` 以 `[完成]` 收尾 |
 
-## 输出与命名
+## 命名规则
+
+<details>
+<summary><b>参考</b></summary>
 
 1. 取 `document.title`，用 `--strip` 去掉站点后缀
 2. 清除 Windows 非法字符与保留名，空名回退到 `--video-id`
 3. 单集/电影：`<name>.mp4`；剧集加 `--episode N`：`<name>_第<NN>集.mp4`
 4. 想直接指定基名用 `--name`
 
-需要看进度时才运行（仅 HLS）：
-
-```text
-python anything-video-downloader/scripts/hls_progress.py --root "<下载目录>"
-```
-
-## 环境依赖
-
-| 依赖 | 说明 |
-|------|------|
-| Python 3.8+ | `python` 在 PATH 中；AES-128 解密需要 `cryptography` |
-| aria2c | 在 PATH 中；并发分段下载与续传 |
-| ffmpeg / ffprobe | 在 PATH 中；合并与校验（`direct` 引擎只需 ffprobe） |
-| curl | 取 playlist/密钥与直链探测；Windows 10/11 自带 `curl.exe` |
-| 浏览器工具 | 推荐 **chrome-devtools MCP**：过 Cloudflare 校验并读网络请求取媒体地址 |
-
-完整安装步骤与 chrome-devtools MCP 配置见 [references/setup.md](anything-video-downloader/references/setup.md)。
+</details>
 
 <details>
 <summary><b>仓库结构</b></summary>
@@ -161,7 +165,7 @@ python anything-video-downloader/scripts/hls_progress.py --root "<下载目录>"
     ├── references/sites-private/ # 本地私有站点文档（.gitignore 排除，不入库）
     └── scripts/
         ├── check_deps.py         # 依赖检查：aria2c / ffmpeg / ffprobe / curl / cryptography
-        ├── make_job.py           # 生成 job JSON 与启动命令（推荐入口）
+        ├── make_job.py           # 生成 job JSON 与启动命令
         ├── start_hls_windows.py  # 打开下载控制台，按引擎分发
         ├── hls_download.py       # HLS：解析 → 下载 → 解密 → 合并 → 校验
         ├── bilibili_download.py  # DASH：解析双流 → 下载 → 合并 → 校验
