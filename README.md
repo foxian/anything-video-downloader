@@ -68,13 +68,13 @@ The skill resolves the stream URL, picks the right engine, downloads, merges, ve
 
 One-time setup, two steps.
 
-1. **Install the skill.** Copy the `anything-video-downloader/` folder into your host's skills directory, then reload the host:
+1. **Install the skill.** Copy the skill root folder (the directory containing `SKILL.md`) into your host's skills directory, then reload the host:
    - Claude Code: `~/.claude/skills/anything-video-downloader/`
    - Trae: `~/.trae-cn/skills/anything-video-downloader/`
 2. **Check dependencies:**
 
 ```text
-python anything-video-downloader/scripts/check_deps.py
+python "<skill-root>/scripts/check_deps.py"
 ```
 
 All items `[OK]` and exit code `0` means you are ready. Install instructions and chrome-devtools MCP setup: [references/setup.md](anything-video-downloader/references/setup.md).
@@ -100,19 +100,19 @@ If you would rather run the pieces yourself, build a job and start it:
 HLS:
 
 ```text
-python anything-video-downloader/scripts/make_job.py --page "<player URL>" --m3u8 "<m3u8 URL>" --title "<raw document.title>" --strip "<site title suffix>" --root "<download-dir>"
+python "<skill-root>/scripts/make_job.py" --page "<player URL>" --m3u8 "<m3u8 URL>" --title "<raw document.title>" --strip "<site title suffix>" --root "<download-dir>"
 ```
 
 Bilibili:
 
 ```text
-python anything-video-downloader/scripts/make_job.py --bvid "BV1xx411c7mD" --quality 1080p --root "<download-dir>"
+python "<skill-root>/scripts/make_job.py" --bvid "BV1xx411c7mD" --quality 1080p --root "<download-dir>"
 ```
 
 Direct (Douyin and similar):
 
 ```text
-python anything-video-downloader/scripts/make_job.py --url "<video.currentSrc>" --page "<player URL>" --root "<download-dir>"
+python "<skill-root>/scripts/make_job.py" --url "<video.currentSrc>" --page "<player URL>" --root "<download-dir>"
 ```
 
 Then run the printed launch command:
@@ -121,7 +121,7 @@ Then run the printed launch command:
 python "<skill-root>/scripts/start_hls_windows.py" --args-json "<download-dir>/_job.json"
 ```
 
-Progress on demand (HLS only): `python anything-video-downloader/scripts/hls_progress.py --root "<download-dir>"`.
+Progress on demand (HLS only): `python "<skill-root>/scripts/hls_progress.py" --root "<download-dir>"`.
 
 </details>
 
@@ -178,9 +178,9 @@ Progress on demand (HLS only): `python anything-video-downloader/scripts/hls_pro
 <details>
 <summary><b>Path conventions</b></summary>
 
-- This README lives at the repository root, so `anything-video-downloader/scripts/...` in commands is a **repo-relative path**.
-- After installing the skill, the **skill root is `anything-video-downloader/`** (the directory containing `SKILL.md`). Inside that directory you can use `scripts/...`; elsewhere, write `<skill-root>/scripts/...` and substitute an absolute path.
-- `${CLAUDE_SKILL_DIR}` is guaranteed only in Claude Code (and mainly for bash injection commands). Other hosts do not guarantee it; cross-host skills should use absolute-path placeholders instead. Scripts locate their own directory with `Path(__file__).resolve().parent`.
+- `<skill-root>` means the installed skill directory — the one containing `SKILL.md` (in this repo, `anything-video-downloader/`). Every command in this README uses `<skill-root>/scripts/...`; substitute its absolute path on your machine. The relative links in this README point at the repo copy, not your install path.
+- Scripts locate their own resources with `Path(__file__).resolve().parent`, so they work regardless of cwd.
+- `${CLAUDE_SKILL_DIR}` is guaranteed only in Claude Code (and mainly for bash injection commands). Other hosts do not guarantee it; cross-host skills should use absolute-path placeholders instead.
 - Use forward slashes everywhere; do not write `scripts\...`.
 - Replace `<download-dir>` with an absolute path, e.g. `$env:USERPROFILE/Downloads/video-downloader`. Do not hardcode paths from a specific machine.
 - `out` / `workdir` / `log` in job JSON must be absolute. `make_job.py` converts them; if you hand-write a job, relative values resolve against the **job file's directory** (not the cwd).

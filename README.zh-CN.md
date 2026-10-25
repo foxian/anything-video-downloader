@@ -68,13 +68,13 @@
 
 一次性准备，两步。
 
-1. **安装技能。** 把 `anything-video-downloader/` 整个目录复制到宿主的技能目录，然后重载宿主：
+1. **安装技能。** 把技能根目录（`SKILL.md` 所在目录）整个复制到宿主的技能目录，然后重载宿主：
    - Claude Code：`~/.claude/skills/anything-video-downloader/`
    - Trae：`~/.trae-cn/skills/anything-video-downloader/`
 2. **检查依赖：**
 
 ```text
-python anything-video-downloader/scripts/check_deps.py
+python "<技能根目录>/scripts/check_deps.py"
 ```
 
 全部 `[OK]` 且退出码为 `0` 即可开始。安装步骤与 chrome-devtools MCP 配置见 [references/setup.md](anything-video-downloader/references/setup.md)。
@@ -100,19 +100,19 @@ python anything-video-downloader/scripts/check_deps.py
 HLS：
 
 ```text
-python anything-video-downloader/scripts/make_job.py --page "<播放页 URL>" --m3u8 "<m3u8 地址>" --title "<document.title 原文>" --strip "<站点标题后缀>" --root "<下载目录>"
+python "<技能根目录>/scripts/make_job.py" --page "<播放页 URL>" --m3u8 "<m3u8 地址>" --title "<document.title 原文>" --strip "<站点标题后缀>" --root "<下载目录>"
 ```
 
 B站：
 
 ```text
-python anything-video-downloader/scripts/make_job.py --bvid "BV1xx411c7mD" --quality 1080p --root "<下载目录>"
+python "<技能根目录>/scripts/make_job.py" --bvid "BV1xx411c7mD" --quality 1080p --root "<下载目录>"
 ```
 
 直链（抖音等）：
 
 ```text
-python anything-video-downloader/scripts/make_job.py --url "<video.currentSrc>" --page "<播放页 URL>" --root "<下载目录>"
+python "<技能根目录>/scripts/make_job.py" --url "<video.currentSrc>" --page "<播放页 URL>" --root "<下载目录>"
 ```
 
 再执行打印出的启动命令：
@@ -121,7 +121,7 @@ python anything-video-downloader/scripts/make_job.py --url "<video.currentSrc>" 
 python "<技能根目录>/scripts/start_hls_windows.py" --args-json "<下载目录>/_job.json"
 ```
 
-需要看进度时（仅 HLS）：`python anything-video-downloader/scripts/hls_progress.py --root "<下载目录>"`。
+需要看进度时（仅 HLS）：`python "<技能根目录>/scripts/hls_progress.py" --root "<下载目录>"`。
 
 </details>
 
@@ -178,9 +178,9 @@ python "<技能根目录>/scripts/start_hls_windows.py" --args-json "<下载目�
 <details>
 <summary><b>路径约定</b></summary>
 
-- 本 README 位于仓库根目录，命令里的 `anything-video-downloader/scripts/...` 是**仓库相对路径**。
-- 安装后**技能根目录是 `anything-video-downloader/`**（`SKILL.md` 所在目录）。在该目录下可写 `scripts/...`；其他位置一律写 `<技能根目录>/scripts/...` 并替换为绝对路径。
-- `${CLAUDE_SKILL_DIR}` 只在 Claude Code 中保证可用（主要面向 bash 注入命令），其他宿主不保证；跨宿主技能改用绝对路径占位符。脚本内用 `Path(__file__).resolve().parent` 定位自身。
+- `<技能根目录>` 指已安装的技能目录，也就是 `SKILL.md` 所在目录（本仓库里是 `anything-video-downloader/`）。本 README 的命令统一写 `<技能根目录>/scripts/...`，执行时替换成你机器上的绝对路径；文中的相对链接指向仓库副本，不是安装位置。
+- 脚本用 `Path(__file__).resolve().parent` 定位自身资源，与 cwd 无关。
+- `${CLAUDE_SKILL_DIR}` 只在 Claude Code 中保证可用（主要面向 bash 注入命令），其他宿主不保证；跨宿主技能改用绝对路径占位符。
 - 统一使用正斜杠，不要写 `scripts\...`。
 - 示例中的 `<下载目录>` 换成绝对路径，如 `$env:USERPROFILE/Downloads/video-downloader`；不要硬编码某台机器的路径。
 - job JSON 的 `out` / `workdir` / `log` 必须是绝对路径，`make_job.py` 会转换；手写 job 时相对值按 **job 文件所在目录** 解析（不是 cwd）。
