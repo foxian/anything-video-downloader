@@ -1,0 +1,21 @@
+# generated / local-only
+# `esl release publish` packs the working tree (not just git-tracked files),
+# so keep these off disk before publishing.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+.DS_Store
+
+# job/runtime artifacts
+job_*.json
+_job_*.json
+*.log
+*.mp4
+
+# private site notes (adult / piracy sites); never publish
+references/sites-private/
+
+# retired PowerShell implementation; do not reintroduce
+archive/
