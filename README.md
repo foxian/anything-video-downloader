@@ -7,9 +7,9 @@ English | [中文](README.zh-CN.md)
 ![Engines](https://img.shields.io/badge/engines-HLS%20%7C%20DASH%20%7C%20Direct-success)
 ![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-purple)
 
-**Point it at a player page. Get a clean mp4. Keep the knowledge for the next site.**
+**Point it at a player page. Get a clean mp4. Keep a doc for the next visit.**
 
-An Agent Skill with three download engines, automatic encrypted-stream handling, and a site knowledge base that grows every time you use it. No URL logger, no "one site per tool" limit — just a repeatable workflow that gets faster as it learns.
+An Agent Skill with three download engines, automatic encrypted-stream handling, and a set of per-site docs that makes repeat downloads faster. No URL logger, no "one site per tool" limit — just a repeatable workflow that improves with use.
 
 ## Why it stands out
 
@@ -30,7 +30,7 @@ An Agent Skill with three download engines, automatic encrypted-stream handling,
 
 Anything the workflow can reach without breaking DRM or a paywall is in scope: episode pages, course players, self-hosted HLS, and public video platforms. Adult and piracy sources are intentionally out of scope for this public repository.
 
-## The knowledge base compounds
+## Site docs, reused next time
 
 ```text
 new site
@@ -158,7 +158,7 @@ Progress on demand (HLS only): `python "<skill-root>/scripts/hls_progress.py" --
 └── anything-video-downloader/
     ├── SKILL.md                  # Main skill doc: full workflow and parameters
     ├── references/setup.md       # Dependency install and chrome-devtools MCP setup
-    ├── references/sites/         # Public site knowledge base (filename = primary domain)
+    ├── references/sites/         # Public site docs (filename = primary domain)
     │   ├── _TEMPLATE.md          # Template for new site docs
     │   ├── bilibili.md           # Bilibili DASH
     │   └── douyin.md             # Douyin direct links
