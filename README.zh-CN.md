@@ -9,7 +9,7 @@
 
 **给它一个播放页，还你一个干净的 mp4；下一个同类站点，直接不用重新分析。**
 
-一个带三种下载引擎的 Agent 技能：自动处理加密流，并把每次分析沉淀成站点文档，同站点下次更快。没有录制屏幕的土办法，也没有「一个工具只支持一个站」的限制——一套可复用的流程，用得越多越顺。
+一个带三种下载引擎的 Agent 技能：自动处理加密流，并把每次分析沉淀进站点文档库，同站点下次更快。没有录制屏幕的土办法，也没有「一个工具只支持一个站」的限制——一套可复用的流程，用得越多越顺。
 
 ## 它强在哪
 
@@ -30,7 +30,7 @@
 
 只要不绕过 DRM、不绕过付费墙，流程能触达的都在范围内：剧集页、课程播放器、自建 HLS、公开视频平台。成人、盗版来源不在本公开仓库的支持范围内。
 
-## 站点文档，下次直接复用
+## 站点文档库，下次直接复用
 
 ```text
 新站点
@@ -50,7 +50,7 @@
      下次请求：读文档，跳过分析，直接下载
 ```
 
-查找顺序：公开 `references/sites/` → 本地 `references/sites-private/` → `SKILL.md` 的通用流程。站点文档会记录：匹配 URL、播放器类型、取地址方法、加密方式、CDN 特点、过期表现，以及一条已验证的命令示例。
+查找顺序：公开 `references/sites/` → 本地 `references/sites-private/` → `SKILL.md` 的通用流程。站点文档库会记录：匹配 URL、播放器类型、取地址方法、加密方式、CDN 特点、过期表现，以及一条已验证的命令示例。
 
 ## 快速开始
 
@@ -158,11 +158,11 @@ python "<技能根目录>/scripts/start_hls_windows.py" --args-json "<下载目�
 └── anything-video-downloader/
     ├── SKILL.md                  # 技能主文档：完整流程与参数说明
     ├── references/setup.md       # 依赖安装与 chrome-devtools MCP 配置
-    ├── references/sites/         # 公开站点文档（文件名 = 主域名）
+    ├── references/sites/         # 公开站点文档库（文件名 = 主域名）
     │   ├── _TEMPLATE.md          # 新站点文档模板
     │   ├── bilibili.md           # B站 DASH
     │   └── douyin.md             # 抖音直链
-    ├── references/sites-private/ # 本地私有站点文档（.gitignore 排除，不入库）
+    ├── references/sites-private/ # 本地私有站点文档库（.gitignore 排除，不入库）
     └── scripts/
         ├── check_deps.py         # 依赖检查：aria2c / ffmpeg / ffprobe / curl / cryptography
         ├── make_job.py           # 生成 job JSON 与启动命令
