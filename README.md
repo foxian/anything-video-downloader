@@ -191,7 +191,7 @@ Progress on demand (HLS only): `python "<skill-root>/scripts/hls_progress.py" --
 
 - Download only content you own or are authorized to access
 - No DRM or paywall bypass; no finished media or piracy site lists are provided
-- Site docs are split into public and private tiers; the public repository contains no adult-site docs
+- Site docs are split into public and private tiers; the public repository contains no private "you know what" site docs
 - For personal study and backup only; respect copyright, do not redistribute or use commercially
 
 ## Notes
