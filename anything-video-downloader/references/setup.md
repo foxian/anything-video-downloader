@@ -1,6 +1,6 @@
 # 环境准备：依赖与浏览器工具
 
-本技能要跑通「取地址 → 下载 → 合并 → 校验」，需要几项外部工具。**先检查、再下载**：缺依赖时启动器会直接报错并给出安装命令，不会弹下载窗。
+本技能要跑通「取地址 → 下载 → 合并 → 校验」，需要几项外部工具。**首次使用前检查一次即可**：通过后脚本会在技能根目录写 `.deps-ok.json`，之后启动器与下载脚本自动跳过预检；只有某次运行中发现缺工具时，才会清标记并自动做一次全量检查。
 
 ## 依赖矩阵
 
@@ -20,7 +20,7 @@
 
 > 脚本当前默认面向 Windows（调用 `curl.exe`、用新控制台跑下载）。非 Windows 平台需把脚本里的 `curl.exe` 改成 `curl`。
 
-## 一键检查
+## 一键检查（首次使用前一次即可）
 
 在技能根目录（`SKILL.md` 所在目录）执行：
 
@@ -28,7 +28,7 @@
 python scripts/check_deps.py
 ```
 
-只看某个引擎：
+省略 `--engine` 会检查三个引擎的并集；只看某个引擎：
 
 ```text
 python scripts/check_deps.py --engine direct
@@ -36,6 +36,12 @@ python scripts/check_deps.py --engine hls --cryptography
 ```
 
 输出会逐项标注 `[OK]` / `[缺失]`，缺失时附上对应平台的安装命令。退出码：`0` 全部必需项就绪，`2` 有缺失。
+
+检查通过后，脚本把结果写入技能根目录的 `.deps-ok.json`（已在 `.gitignore` 中）。此后启动器与下载脚本直接跳过预检，不必每次再跑。只有这些情况会重新检查：
+
+- 某次下载运行中报缺少外部工具：脚本会删除标记，自动做一次全引擎完整检查并给出安装命令。安装会改动系统，执行前先征得用户同意，装完重开终端（刷新 PATH）再重试。
+- 手动要求重查：`python scripts/check_deps.py --force`
+- 想清除「已通过」记录：`python scripts/check_deps.py --forget`
 
 不确定当前目录时用绝对路径，例如：
 
@@ -155,9 +161,15 @@ npx chrome-devtools-mcp@latest --help
 - `npx` 首次运行会询问是否安装 → 配置里已加 `-y` 自动确认。
 - 打开页面后网络请求里没有 `.m3u8` → 先点一下播放；仍没有就按站点文档（`sites/<域名>.md`）的兜底写法处理。
 
+## 依赖常见问题
+
+- **明明装过仍提示缺失**：PATH 未刷新，或装到了别的用户目录。重开终端后用 `python scripts/check_deps.py --force` 复核；Windows 再确认 `curl.exe --version` 可用。
+- **想强制重查**：加 `--force`；**想忘掉「已通过」记录**：`python scripts/check_deps.py --forget`。
+- **标记写不进去**（技能目录只读）：只在 stderr 警告，不影响下载，只是每次仍会检查。
+
 ## 安装后自检清单
 
-1. `python scripts/check_deps.py` 退出码为 `0`。
+1. 首次安装后跑 `python scripts/check_deps.py --force`，退出码为 `0`（日常无需重复跑）。
 2. `ffmpeg -version`、`aria2c --version` 都有输出。
 3. 浏览器 MCP 能打开一个播放页并列出网络请求。
 4. 用 `make_job.py --max-segments 3` 做一次冒烟下载，日志出现 `[完成]`。

@@ -60,7 +60,7 @@ Lookup order: public `references/sites/` -> local `references/sites-private/` ->
 Download the video on this page: https://example.com/watch/123
 ```
 
-Want a specific folder or quality? Just say so: "save it to D:/Downloads and use 1080p". Several episodes at once? "Download these three episodes: <URL1> <URL2> <URL3>".
+Want a specific folder or quality? Just say so: "save it to D:/Downloads and use 1080p". Several episodes at once? "Download these three episodes: <URL1> <URL2> <URL3>". On multi-quality sites you'll pick a quality each time, with the site doc's default marked as recommended; a same-site batch asks only once.
 
 The skill resolves the stream URL, picks the right engine, downloads, merges, verifies the file, and returns the output path.
 
@@ -71,13 +71,13 @@ One-time setup, two steps.
 1. **Install the skill.** Copy the skill root folder (the directory containing `SKILL.md`) into your host's skills directory, then reload the host:
    - Claude Code: `~/.claude/skills/anything-video-downloader/`
    - Trae: `~/.trae-cn/skills/anything-video-downloader/`
-2. **Check dependencies:**
+2. **Check dependencies (once):**
 
 ```text
 python "<skill-root>/scripts/check_deps.py"
 ```
 
-All items `[OK]` and exit code `0` means you are ready. Install instructions and chrome-devtools MCP setup: [references/setup.md](anything-video-downloader/references/setup.md).
+All items `[OK]` and exit code `0` means you are ready. The skill records the result in `.deps-ok.json` and skips this check on later runs; only a download that hits a missing tool re-runs the full check, and it asks before installing anything. Install instructions and chrome-devtools MCP setup: [references/setup.md](anything-video-downloader/references/setup.md).
 
 <details>
 <summary><b>Dependencies</b></summary>

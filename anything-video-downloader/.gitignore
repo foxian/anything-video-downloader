@@ -13,6 +13,8 @@ job_*.json
 _job_*.json
 *.log
 *.mp4
+.deps-ok.json
+.deps-ok.json.tmp
 
 # private site notes (adult / piracy sites); never publish
 references/sites-private/

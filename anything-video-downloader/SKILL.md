@@ -33,15 +33,18 @@ description: 视频下载：把你有权访问的网页播放页视频保存为 
 - **curl**：拉播放列表/KEY、直链探测（Windows 自带 `curl.exe`）。
 - **浏览器访问工具（必需）**：推荐安装 **chrome-devtools MCP**，用于过 Cloudflare、读网络请求取 `.m3u8` / `video.currentSrc`；安装与配置见 [references/setup.md](references/setup.md)。
 
-**启动下载前先检查依赖**：
+**依赖只在首次使用时检查一次**：
 
 ```text
-python "<技能根目录>/scripts/check_deps.py" --engine hls
+python "<技能根目录>/scripts/check_deps.py"
 ```
 
-`--engine` 按任务选：`hls`（m3u8）/ `dash`（B站）/ `direct`（直链）；省略时按三个引擎的并集检查。
+省略 `--engine` 时检查三个引擎的并集；也可用 `--engine hls|dash|direct` 只查本次要用的引擎。全部 `[OK]` 且退出码为 `0` 后，脚本会在技能根目录写 `.deps-ok.json`；之后启动器与下载脚本**自动跳过预检**，不必每次再跑。
 
-缺失时按 [references/setup.md](references/setup.md) 安装（含 Windows winget / macOS brew / Linux apt 命令），装完重开终端复核；**不要跳过预检直接启动下载**。`start_hls_windows.py` 会再预检一次：缺依赖时在当前终端报错并给安装命令，不弹下载窗。
+某次下载因缺少工具而失败时（运行中报 `FileNotFoundError`），脚本会删除标记并自动做一次**全引擎**完整检查，列出缺失项与安装命令（Windows winget / macOS brew / Linux apt，见 [references/setup.md](references/setup.md)）。**先征得用户同意再执行安装**，装完重开终端（刷新 PATH）再重试。
+
+- `--force`：忽略标记强制重查（怀疑 PATH 变了时用）。
+- `--forget`：删除标记，下次启动重新检查。
 
 > **网络环境提示**：本机 bash 沙箱可能拦掉部分站点主域（实测有站点直连超时），但**通常放行 CDN**。所以浏览器只用来过校验、取 m3u8 地址，下载脚本本身在命令行就能跑通——不必为了下载去绕沙箱。取到地址后先用 `curl.exe -sS -o /dev/null -w "%{http_code}"` 打一下 CDN，确认可达再启动下载。
 
@@ -87,15 +90,15 @@ python "<技能根目录>/scripts/check_deps.py" --engine hls
    - `SAMPLE-AES` / 密钥不可读 / 没有 KEY URI → 停止，不能继续。
 4. **提取视频名称**（供输出文件命名）：优先 `document.title`，其次播放器配置里的名称字段（如 `player_aaaa.vod_data` 内的名称项）；清洗规则见步骤 3。
 5. 快速验证链接：用 Python/`curl.exe -s -L`（不要用 PowerShell 的 `curl` 别名），带 Chrome UA 和播放页 Referer，确认返回 `#EXTM3U`。
-6. 若返回含 `#EXT-X-STREAM-INF`（多档画质），**先问用户选画质**：选项按从高到低列出各档分辨率（标注最高档「推荐」），用户选择后写入 job JSON 的 `quality`；仅单档画质时直接下载，无需询问。
+6. 若返回含 `#EXT-X-STREAM-INF`（多档画质）：先查站点文档的「画质档位」，按从高到低列出档位，把文档里的**默认画质标为「推荐」**，**每次都由用户选**；用户已明确画质则不再问。无文档或文档无该章节时，按 master 实际档位列给用户。选定值写入 job JSON 的 `quality`；仅单档时直接下载，无需询问。
 
 ### 3. 运行下载脚本
 
-启动器会先预检依赖（见「依赖」）；缺失时在当前终端报错并给出安装命令，不弹下载窗。依赖齐全后再按下面的方式启动。
+启动器按 `.deps-ok.json` 跳过已通过的预检；首次或标记失效时才检查（见「依赖」），缺失时在当前终端报错并给出安装命令，不弹下载窗。
 
 [scripts/hls_download.py](scripts/hls_download.py) 覆盖「master 解析 → 分片下载 → 合并 → 校验」。正式下载必须走 [scripts/start_hls_windows.py](scripts/start_hls_windows.py)：先写 UTF-8 JSON，再弹出**一个**下载控制台。下载脚本自己会打进度条，不要再开进度窗。
 
-**B站（DASH，无 m3u8）用 [scripts/bilibili_download.py](scripts/bilibili_download.py)**：`make_job.py` 以 `--ep-id`（课程 cheese）或 `--bvid`/`--aid`（普通视频）代替 `--m3u8`，生成 `engine=dash` 的 job，`start_hls_windows.py` 自动分派到该脚本。脚本**运行时现调 playview/playurl 取直链**（签名地址约 2h 过期，绝不烤进 job）→ aria2 双流下载（视频 m4s + 音频 m4s）→ ffmpeg 无损合并 → ffprobe 校验；日志、断点续传、弹窗行为与 HLS 引擎一致。`--quality` 支持 `1080p+`/`1080p`/`720p`/...（多档同样先问用户），`--codec avc|hev|av1`。接口与 CDN 均匿名可达，**不需要浏览器**；仅当你本人已登录且已购买/有权访问时，才把 Cookie 放进 `extra_headers`——未购买的内容接口不会返回流，也不应尝试绕过。详见 [references/sites/bilibili.md](references/sites/bilibili.md)。
+**B站（DASH，无 m3u8）用 [scripts/bilibili_download.py](scripts/bilibili_download.py)**：`make_job.py` 以 `--ep-id`（课程 cheese）或 `--bvid`/`--aid`（普通视频）代替 `--m3u8`，生成 `engine=dash` 的 job，`start_hls_windows.py` 自动分派到该脚本。脚本**运行时现调 playview/playurl 取直链**（签名地址约 2h 过期，绝不烤进 job）→ aria2 双流下载（视频 m4s + 音频 m4s）→ ffmpeg 无损合并 → ffprobe 校验；日志、断点续传、弹窗行为与 HLS 引擎一致。`--quality` 支持 `1080p+`/`1080p`/`720p`/...（多档按站点文档「画质档位」每次询问，默认项标推荐），`--codec avc|hev|av1`。接口与 CDN 均匿名可达，**不需要浏览器**；仅当你本人已登录且已购买/有权访问时，才把 Cookie 放进 `extra_headers`——未购买的内容接口不会返回流，也不应尝试绕过。详见 [references/sites/bilibili.md](references/sites/bilibili.md)。
 
 **直链 mp4（如抖音）用 [scripts/direct_download.py](scripts/direct_download.py)**：`make_job.py` 以 `--url`（浏览器里取到的 `<video>.currentSrc`）代替 `--m3u8`，生成 `engine=direct` 的 job，`start_hls_windows.py` 自动分派。脚本流程：Range 探测直链（验可达 + 拿总大小/类型）→ aria2 单文件下载（断点续传、小缺口自动补跑）→ ffprobe 校验；**无合并步骤**（单文件已含音视频）。与 B站不同，抖音的签名直链**没有公开接口可重取**，所以必须烤进 job 并**取到后尽快下载**（过期 403 就回浏览器重提）。`--quality`/`--max-segments` 不适用。详见 [references/sites/douyin.md](references/sites/douyin.md)。
 
@@ -121,7 +124,7 @@ python "<技能根目录>/scripts/start_hls_windows.py" --args-json "<下载目�
 python "<技能根目录>/scripts/make_job.py" --batch "<下载目录>/batch.json" --strip "<站点尾缀>" --root "<下载目录>"
 ```
 
-共享的 `--strip` / `--quality` / `--parallel` / `--cleanup` 从命令行给；`--page` / `--m3u8` / `--title` 可在命令行给默认值，由每项覆盖。job 落在 `<root>/_jobs/`。
+共享的 `--strip` / `--quality` / `--parallel` / `--cleanup` 从命令行给；`--page` / `--m3u8` / `--title` 可在命令行给默认值，由每项覆盖。job 落在 `<root>/_jobs/`。同站点批量只问一次画质，`--quality` 应用到整批；批次内混站点时按主域名分组各问一次。
 
 **路径一律用绝对路径**（统一正斜杠）。`--args-json` 的相对路径按当前进程目录解析，找不到就直接报错，不再沿脚本目录向上猜同名文件——技能可能装在很深的目录里，猜错成本比报错高。启动失败时先怀疑路径，直接用 `make_job.py` 打印出的绝对路径命令。
 
@@ -251,16 +254,17 @@ python -u "<技能根目录>/scripts/hls_progress.py" --root "<下载目录>"
 - 提取方式（优先「读网络请求筛 `.m3u8`」，兜底再写 JS 变量/packed JS；注明 encrypt 判定、是否需浏览器）。**无 m3u8 的站点按实际流程写**：DASH（接口地址/参数/响应结构/选流规则，参考 [bilibili.md](references/sites/bilibili.md)）或直链（取址方式如 `<video>.currentSrc`、校验方式，参考 [douyin.md](references/sites/douyin.md)）
 - 视频名称提取方式（`document.title` 的格式与**给 `make_job.py --strip` 用的尾缀字符串**）
 - 播放列表结构（master / media / 分片 各层域名与路径模式）
+- 画质档位与默认画质（档位标签、传给脚本的值、分辨率/码率、备注；**默认画质写本次用户实际选择的档位**；单档或 direct 写「单一画质」）
 - 请求头要求（Referer 规则、UA）
 - 时效性与过期现象
 - 已验证的脚本调用示例（`make_job.py` 命令行 + 打印出的 `start_hls_windows.py` 绝对路径命令）
 
-下次遇到同站点请求时直接按文档执行，跳过通用分析。
+下次遇到同站点请求时直接按文档执行，跳过通用分析。画质仍按文档档位每次询问，默认值只作推荐，不静默沿用。
 
 ## 注意事项
 
 - 多集用 `make_job.py --batch` 一次生成所有 job，再逐个执行启动命令；同站点建议 ≤3 集同时（并行多个 `start_hls_windows.py` 实例）。
-- 依赖缺失时不要反复重试下载：先跑 `check_deps.py` 按 [references/setup.md](references/setup.md) 装好 ffmpeg/aria2c，重开终端再下。
+- 运行中报缺依赖时：脚本已自动清标记并做全量检查、给出安装命令；确认后安装，重开终端重试。不要反复重试下载。标记位于技能根目录 `.deps-ok.json`，可手动删除或跑 `check_deps.py --forget`。
 - 公开仓库不收录色情、盗版站点文档；此类文档只放 `references/sites-private/`（`.gitignore` 排除）。
 - 本技能只用于下载本人拥有或已获授权的内容；不提供成品资源，不绕过 DRM / 付费墙。
 - 仅用于个人学习或备份，提醒用户注意版权，勿传播或商用。

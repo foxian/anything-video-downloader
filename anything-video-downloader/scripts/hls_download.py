@@ -81,20 +81,14 @@ def die(msg: str, code: int = 1) -> None:
 
 def preflight(engine: str, aria2: str = "aria2c", ffmpeg: str = "ffmpeg",
               ffprobe: str = "ffprobe") -> None:
-    """启动前确认必需的外部工具存在；缺失时给安装命令并退出（不弹下载窗）。
+    """确认必需的外部工具存在；已通过检查的引擎由标记跳过。
 
     engine 决定必需项：hls/dash 需要 aria2c + ffmpeg + ffprobe，direct 只需 aria2c + ffprobe。
+    标记不存在或未覆盖时实查，缺失则给安装命令并退出；齐全时记录标记。
     """
     import check_deps
 
-    missing = check_deps.missing_for(engine, aria2=aria2, ffmpeg=ffmpeg, ffprobe=ffprobe)
-    if not missing:
-        return
-    names = "、".join(check_deps.display_name(t) for t in missing)
-    lines = [f"缺少必需依赖：{names}", ""]
-    lines += check_deps.hint_lines(missing)
-    lines += ["", "安装与浏览器工具配置详见 references/setup.md"]
-    die("\n".join(lines))
+    check_deps.ensure(engine, exit_code=1, aria2=aria2, ffmpeg=ffmpeg, ffprobe=ffprobe)
 
 
 def fmt_hms(seconds: float) -> str:
@@ -290,16 +284,18 @@ def get_media_playlist(url: str, quality: str, workdir: Path, page: str, extra_h
         chosen = None
         if quality and quality != "highest":
             want = int(re.sub(r"[^0-9]", "", quality) or "0")
+            matched = []
             for v in variants:
                 h = 0
                 m = re.search(r"x(\d+)", v["res"])
                 if m:
                     h = int(m.group(1))
                 if h == want:
-                    chosen = v
-                    break
-            if chosen is None:
-                die(f"quality {want}p not found; available: {'/'.join(labels)}")
+                    matched.append(v)
+            if not matched:
+                available = sorted(set(labels), key=lambda s: int(re.sub(r"[^0-9]", "", s) or 0), reverse=True)
+                die(f"quality {want}p not found; available: {'/'.join(available)}")
+            chosen = max(matched, key=lambda v: v["bw"])
         else:
             chosen = sorted(variants, key=lambda v: v["bw"])[-1]
         print(f"[1/{total_steps}] 主列表含 {len(variants)} 档画质（{'/'.join(labels)}），本次选择 {chosen['res']} ...")
@@ -367,6 +363,18 @@ def main() -> int:
 
     try:
         run(args)
+    except FileNotFoundError as exc:
+        print(f"[错误] 运行中缺少外部工具：{exc.filename or exc}", file=sys.stderr)
+        import check_deps
+
+        try:
+            check_deps.recover("hls")
+        except SystemExit:
+            pass
+        if args.pause:
+            wait_enter()
+        close_log(log_handle)
+        return 1
     except SystemExit:
         if args.pause:
             wait_enter()

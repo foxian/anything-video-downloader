@@ -5,18 +5,26 @@
   python scripts/check_deps.py                     # 三个引擎的并集
   python scripts/check_deps.py --engine direct     # 只看直链引擎
   python scripts/check_deps.py --cryptography      # 额外要求 AES-128 所需库
+  python scripts/check_deps.py --force             # 忽略已通过的标记，强制重查
+  python scripts/check_deps.py --forget            # 删除已通过的标记后退出
 
 退出码：0 全部必需项就绪；2 有缺失。
 只检测、只打印安装命令，不会自动安装任何东西。
+
+检查通过后会在技能根目录写 `.deps-ok.json`；启动器与下载脚本据此静默跳过
+重复预检。某次运行中因缺少工具失败时，下载脚本会调用 recover() 清标记并
+做一次全引擎检查。
 """
 from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import platform
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 # 各引擎的必需工具（按顺序输出）。
@@ -32,6 +40,13 @@ OVERRIDE_KEY = {"aria2c": "aria2", "ffmpeg": "ffmpeg", "ffprobe": "ffprobe", "cu
 
 # 本技能脚本里硬编码的是 curl.exe；其他平台用 curl。
 CURL_BIN = "curl.exe" if sys.platform == "win32" else "curl"
+
+# 检查通过标记：技能根目录（SKILL.md 同目录）。只记录实查通过的工具。
+MARKER_VERSION = 1
+MARKER_PATH = Path(__file__).resolve().parent.parent / ".deps-ok.json"
+
+# 脚本参数默认值；用户传入其他路径时不使用标记（必须实查）。
+DEFAULT_VALUE = {"aria2": "aria2c", "ffmpeg": "ffmpeg", "ffprobe": "ffprobe", "curl": CURL_BIN}
 
 PURPOSE = {
     "aria2c": "并发分片下载 + 断点续传",
@@ -85,6 +100,98 @@ def missing_for(engine: str, **overrides) -> list[str]:
     return missing
 
 
+def required_tools(engine: str | None) -> list[str]:
+    """该引擎的必需工具；engine 为空时返回三个引擎的并集。"""
+    engines = [engine] if engine else list(ENGINE_REQUIRED)
+    required: list[str] = []
+    for item in engines:
+        for tool in ENGINE_REQUIRED[item]:
+            if tool not in required:
+                required.append(tool)
+    return required
+
+
+def load_marker() -> dict:
+    """读取标记；不存在、损坏或版本不符时返回空 dict。"""
+    try:
+        data = json.loads(MARKER_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict) or data.get("version") != MARKER_VERSION:
+        return {}
+    if not isinstance(data.get("verified"), dict):
+        return {}
+    return data
+
+
+def save_marker(verified: dict) -> None:
+    """原子写入标记；写失败只警告，不影响下载。"""
+    now = datetime.now().isoformat(timespec="seconds")
+    payload = {"version": MARKER_VERSION, "checked_at": now, "verified": dict(verified)}
+    tmp = MARKER_PATH.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+        tmp.replace(MARKER_PATH)
+    except OSError as e:
+        print(f"[警告] 无法写入依赖标记 {MARKER_PATH}：{e}", file=sys.stderr)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def forget_marker() -> bool:
+    """删除标记，返回是否真的删掉了。"""
+    try:
+        MARKER_PATH.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+
+def marker_covers(engine: str | None, **overrides) -> bool:
+    """标记是否已覆盖该引擎的必需工具；自定义工具路径一律视为未覆盖。"""
+    for key, value in overrides.items():
+        if value and value != DEFAULT_VALUE.get(key):
+            return False
+    verified = load_marker().get("verified") or {}
+    return all(tool in verified for tool in required_tools(engine))
+
+
+def ensure(engine: str | None = None, exit_code: int = 1, **overrides) -> None:
+    """标记覆盖则静默返回；否则实查，缺失时报错退出，齐全时写标记。"""
+    if marker_covers(engine, **overrides):
+        return
+    missing = missing_for(engine or "", **overrides)
+    if missing:
+        forget_marker()
+        names = "、".join(display_name(t) for t in missing)
+        lines = [f"[错误] 缺少必需依赖：{names}", ""]
+        lines += hint_lines(missing)
+        lines += ["", "安装与浏览器工具配置详见 references/setup.md"]
+        lines.append(f"复核：python \"{Path(__file__).resolve()}\""
+                     + (f" --engine {engine}" if engine else "") + " --force")
+        print("\n".join(lines), file=sys.stderr)
+        raise SystemExit(exit_code)
+    verified = load_marker().get("verified") or {}
+    now = datetime.now().isoformat(timespec="seconds")
+    for tool in required_tools(engine):
+        verified[tool] = now
+    save_marker(verified)
+
+
+def recover(engine: str | None = None) -> None:
+    """运行中缺工具时调用：清标记，做一次全引擎完整检查。"""
+    forget_marker()
+    where = f"（引擎 {engine}）" if engine else ""
+    print(f"[依赖] 运行中缺少外部工具{where}，重新做一次完整依赖检查。", file=sys.stderr)
+    ensure(None)
+    print("[依赖] 检查通过，可以重试。", file=sys.stderr)
+
+
 def hint_lines(missing: list[str], crypto: bool = False) -> list[str]:
     """按平台给出安装命令（只打印，不执行）。"""
     lines: list[str] = []
@@ -119,6 +226,10 @@ def hint_lines(missing: list[str], crypto: bool = False) -> list[str]:
     if crypto:
         lines.append("安装 cryptography：python -m pip install cryptography")
         lines.append("  只有 AES-128 加密的 HLS 源需要；未安装时明文源仍可正常下载。")
+
+    if lines:
+        lines.append("")
+        lines.append("安装会改动系统，请先确认再执行（Agent 应先征得用户同意）。")
     return lines
 
 
@@ -148,14 +259,27 @@ def main() -> int:
                     help="只检查该引擎的必需项；省略时检查三个引擎的并集")
     ap.add_argument("--cryptography", action="store_true",
                     help="把 cryptography 也算入必需项（AES-128 解密用）")
+    ap.add_argument("--force", action="store_true", help="忽略已通过的标记，强制重查")
+    ap.add_argument("--forget", action="store_true", help="删除已通过的标记后退出（不检查）")
     args = ap.parse_args()
 
-    engines = [args.engine] if args.engine else list(ENGINE_REQUIRED)
-    required: list[str] = []
-    for engine in engines:
-        for tool in ENGINE_REQUIRED[engine]:
-            if tool not in required:
-                required.append(tool)
+    if args.forget:
+        removed = forget_marker()
+        print(f"[标记] {'已删除' if removed else '不存在'}：{MARKER_PATH}")
+        return 0
+
+    required = required_tools(args.engine or None)
+
+    if not args.force:
+        marker = load_marker()
+        verified = marker.get("verified") or {}
+        covered = all(tool in verified for tool in required)
+        if args.cryptography:
+            covered = covered and "cryptography" in verified
+        if covered:
+            print(f"[跳过] 此前已检查通过（{marker.get('checked_at', '时间未知')}）；"
+                  "如需重查加 --force。")
+            return 0
 
     print(f"[检查] 引擎：{args.engine or '全部'}    平台：{platform.system()} {platform.release()}")
     print(f"[检查] Python {platform.python_version()}（{sys.executable}）")
@@ -177,14 +301,22 @@ def main() -> int:
         print(f"{mark} cryptography {note}")
 
     if not missing and not (crypto_required and crypto_missing):
-        print("\n[完成] 依赖齐全，可以开始下载。")
+        verified = load_marker().get("verified") or {}
+        now = datetime.now().isoformat(timespec="seconds")
+        for tool in required:
+            verified[tool] = now
+        if not crypto_missing and (crypto_required or not args.engine):
+            verified["cryptography"] = now
+        save_marker(verified)
+        print(f"\n[完成] 依赖齐全，可以开始下载。已记录到 {MARKER_PATH}")
         return 0
 
+    forget_marker()
     print()
     for line in hint_lines(missing, crypto=crypto_missing):
         print(line)
     print(f"\n复核：python \"{Path(__file__).resolve()}\""
-          + (f" --engine {args.engine}" if args.engine else ""))
+          + (f" --engine {args.engine}" if args.engine else "") + " --force")
     return 2
 
 

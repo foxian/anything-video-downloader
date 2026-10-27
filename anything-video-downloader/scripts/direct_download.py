@@ -279,6 +279,18 @@ def main() -> int:
 
     try:
         run(args)
+    except FileNotFoundError as exc:
+        print(f"[错误] 运行中缺少外部工具：{exc.filename or exc}", file=sys.stderr)
+        import check_deps
+
+        try:
+            check_deps.recover("direct")
+        except SystemExit:
+            pass
+        if args.pause:
+            wait_enter()
+        close_log(log_handle)
+        return 1
     except SystemExit:
         if args.pause:
             wait_enter()

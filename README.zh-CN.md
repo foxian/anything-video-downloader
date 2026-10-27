@@ -60,7 +60,7 @@
 用 anything-video-downloader 下载这个视频：https://example.com/watch/123
 ```
 
-想放到指定目录或指定清晰度，直接说：`存到 D:/Downloads，要 1080p`。多集也行：`把这三集都下了：<URL1> <URL2> <URL3>`。
+想放到指定目录或指定清晰度，直接说：`存到 D:/Downloads，要 1080p`。多集也行：`把这三集都下了：<URL1> <URL2> <URL3>`。多档站点会先让你选画质，默认项来自站点文档；同站点批量只问一次。
 
 技能会解析播放地址、选择合适的引擎、下载并合并、校验成品，最后把输出路径告诉你。
 
@@ -71,13 +71,13 @@
 1. **安装技能。** 把技能根目录（`SKILL.md` 所在目录）整个复制到宿主的技能目录，然后重载宿主：
    - Claude Code：`~/.claude/skills/anything-video-downloader/`
    - Trae：`~/.trae-cn/skills/anything-video-downloader/`
-2. **检查依赖：**
+2. **检查依赖（只需一次）：**
 
 ```text
 python "<技能根目录>/scripts/check_deps.py"
 ```
 
-全部 `[OK]` 且退出码为 `0` 即可开始。安装步骤与 chrome-devtools MCP 配置见 [references/setup.md](anything-video-downloader/references/setup.md)。
+全部 `[OK]` 且退出码为 `0` 即可开始。技能会把结果记到 `.deps-ok.json`，之后运行不再重复检查；只有当某次下载发现缺工具时才会重新做全量检查，并在安装前征求你的同意。安装步骤与 chrome-devtools MCP 配置见 [references/setup.md](anything-video-downloader/references/setup.md)。
 
 <details>
 <summary><b>依赖清单</b></summary>

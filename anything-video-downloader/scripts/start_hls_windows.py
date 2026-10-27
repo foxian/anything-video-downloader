@@ -93,15 +93,8 @@ def main() -> int:
 
     import check_deps
 
-    missing = check_deps.missing_for(engine)
-    if missing:
-        names = "、".join(check_deps.display_name(t) for t in missing)
-        print(f"[错误] 缺少必需依赖：{names}", file=sys.stderr)
-        print("", file=sys.stderr)
-        for line in check_deps.hint_lines(missing):
-            print(line, file=sys.stderr)
-        print(f"\n复核：python \"{here / 'check_deps.py'}\" --engine {engine}", file=sys.stderr)
-        return 1
+    # 此前检查通过就直接跳过；首次或标记失效时才实查。
+    check_deps.ensure(engine, exit_code=1)
 
     if engine == "dash":
         if not (data.get("ep_id") or data.get("bvid") or data.get("aid")):
