@@ -47,6 +47,8 @@ python "<技能根目录>/scripts/check_deps.py"
 - `--forget`：删除标记，下次启动重新检查。
 
 > **网络环境提示**：本机 bash 沙箱可能拦掉部分站点主域（实测有站点直连超时），但**通常放行 CDN**。所以浏览器只用来过校验、取 m3u8 地址，下载脚本本身在命令行就能跑通——不必为了下载去绕沙箱。取到地址后先用 `curl.exe -sS -o /dev/null -w "%{http_code}"` 打一下 CDN，确认可达再启动下载。
+>
+> **例外：YouTube 连主域和 `*.googlevideo.com` CDN 全拦**（直连被重置），必须给命令加 `--proxy http://127.0.0.1:7890`（本机 Clash 端口，用 `netsh winhttp show proxy` / 注册表 `ProxyServer` 确认），且用 yt-dlp 而非本技能的三个引擎。详见 [references/sites/youtube.com.md](references/sites/youtube.com.md)。
 
 ## 路径约定
 
@@ -101,6 +103,8 @@ python "<技能根目录>/scripts/check_deps.py"
 **B站（DASH，无 m3u8）用 [scripts/bilibili_download.py](scripts/bilibili_download.py)**：`make_job.py` 以 `--ep-id`（课程 cheese）或 `--bvid`/`--aid`（普通视频）代替 `--m3u8`，生成 `engine=dash` 的 job，`start_hls_windows.py` 自动分派到该脚本。脚本**运行时现调 playview/playurl 取直链**（签名地址约 2h 过期，绝不烤进 job）→ aria2 双流下载（视频 m4s + 音频 m4s）→ ffmpeg 无损合并 → ffprobe 校验；日志、断点续传、弹窗行为与 HLS 引擎一致。`--quality` 支持 `1080p+`/`1080p`/`720p`/...（多档按站点文档「画质档位」每次询问，默认项标推荐），`--codec avc|hev|av1`。接口与 CDN 均匿名可达，**不需要浏览器**；仅当你本人已登录且已购买/有权访问时，才把 Cookie 放进 `extra_headers`——未购买的内容接口不会返回流，也不应尝试绕过。详见 [references/sites/bilibili.md](references/sites/bilibili.md)。
 
 **直链 mp4（如抖音）用 [scripts/direct_download.py](scripts/direct_download.py)**：`make_job.py` 以 `--url`（浏览器里取到的 `<video>.currentSrc`）代替 `--m3u8`，生成 `engine=direct` 的 job，`start_hls_windows.py` 自动分派。脚本流程：Range 探测直链（验可达 + 拿总大小/类型）→ aria2 单文件下载（断点续传、小缺口自动补跑）→ ffprobe 校验；**无合并步骤**（单文件已含音视频）。与 B站不同，抖音的签名直链**没有公开接口可重取**，所以必须烤进 job 并**取到后尽快下载**（过期 403 就回浏览器重提）。`--quality`/`--max-segments` 不适用。详见 [references/sites/douyin.md](references/sites/douyin.md)。
+
+**YouTube（`youtube.com` / `youtu.be`）用 yt-dlp，不走 job 流程**：三个引擎都不适用（无 `.m3u8`、`adaptiveFormats` 的 `url` 为空、媒体走 UMP protobuf 单文件不可行）。首次用先 `uv tool install yt-dlp`（本机无 `pip`，用 uv 装，不需管理员），命令一律带 `--proxy`，并加 `--no-playlist`（否则 `watch?v=..&list=..` 会下整张播放列表）与 `--extractor-args "youtube:player_client=tv_embedded"`（默认客户端撞 `Sign in to confirm you're not a bot`）。画质按该站点文档每次询问，合并与校验仍用自带 `ffmpeg`/`ffprobe`。详见 [references/sites/youtube.com.md](references/sites/youtube.com.md)。
 
 **推荐启动方式（用 [scripts/make_job.py](scripts/make_job.py) 生成 job）：**
 
