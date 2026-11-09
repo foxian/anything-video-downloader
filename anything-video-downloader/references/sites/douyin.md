@@ -29,6 +29,21 @@
 
 `direct_download.py` 已封装「探测 → aria2 下载 → ffprobe 校验」；job 里放这条 `url`。
 
+> **2026-11 复测：`currentSrc` 可能只是 blob。** PC 端播放器已用 MSE，页面里实测 `video.currentSrc === "blob:https://www.douyin.com/<uuid>"`，网络请求里也看不到 `douyinvod`（媒体由播放器内部/Worker 拉取）。此时改走下面的「兜底：页面内调 aweme detail 接口」。
+
+## 兜底：页面内调 aweme detail 接口（currentSrc 是 blob 时）
+
+1. 打开 `https://www.douyin.com/video/{aweme_id}`。从 `.../user/self?...&modal_id={id}` 一类链接进来时，**先把 URL 换成 `/video/{id}`**；登录态不影响。
+2. 在页面上下文 `evaluate_script` 里带 `credentials:'include'` 直接 fetch（浏览器自动带 cookie 与请求上下文，实测无需手写 `a_bogus` 签名）：
+   ```js
+   const id = '7704922555060581547';
+   const r = await fetch('https://www.douyin.com/aweme/v1/web/aweme/detail/?device_platform=webapp&aid=6383&channel=channel_pc_web&aweme_id=' + id + '&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&platform=PC&downlink=10', {credentials:'include'});
+   const d = (await r.json()).aweme_detail;
+   ```
+3. 取 **`d.video.play_addr.url_list[0]`**：无 watermark、默认最高可用（本机实测 960x720 H.264，`data_size` 17.1 MB）。`download_addr` 带水印（实测 720 宽、25.7 MB），**不要用**。`d.video.bit_rate` 是全部档位（`fmt` 为 `mp4` 或 `dash`，含 hvc1/avc1），`play_addr` 已对应该视频的默认最高 mp4 档。
+4. 拿到 URL 后按上文 Range 探测，再建 `direct` job。签名同样有时效，取到尽快下。
+5. 不要试 `https://www.iesdouyin.com/share/video/{id}/`：从 `www.douyin.com` 页面里 fetch 会被 CORS/`Failed to fetch` 拦掉。
+
 ## 视频名称提取（输出文件命名）
 
 - `document.title` 格式：`<描述文案> - 抖音`（如 `越南林志玲采耳按摩，美美的享受 - 抖音`）
@@ -49,6 +64,7 @@
 
 - **单一画质**：签名直链只对应播放器当前下发的那个 mp4，无多档可选；`quality` 不适用，无需询问用户。
 - 实测样例：1024x576 HEVC + AAC，927s，56.9 MB。
+- 详情接口 `bit_rate` 虽列出多档（`normal_720` / `low_720` / `low_540` / `adapt_*`，含 mp4 与 dash/hvc1），但 `play_addr` 已是默认最高 mp4 档，直接用它即可，不要逐档比较；2026-11 实测样例为 960x720 H.264，99s，17.1 MB。
 
 ## 加密与自定义标签
 
